@@ -5,12 +5,16 @@ import os
 import json
 from mediapipe.tasks import python
 from mediapipe.tasks.python import vision
+import socketio
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
 # Paths
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 MODEL_PATH = os.path.join(SCRIPT_DIR, 'models', 'hand_landmarker.task')
 
 DATA_FILE = os.path.join(SCRIPT_DIR, 'data_hand.json')
+
+SERVER = 'http://192.168.1.54:8000'
 
 # Initiate Detector
 base_options = python.BaseOptions(model_asset_path=MODEL_PATH)
@@ -56,9 +60,23 @@ def draw_landmarks_on_image(image, detection_result):
 
     return image
 
+
+#---------------MAIN------------------------
+
+sio = socketio.Client()
+@sio.event
+def connect():
+    print(">>> [Pi] Kết nối thành công tới AI Server!")
+
 cap = cv2.VideoCapture(0)
 timestamp = 0
 collected_data = []
+
+try:
+    sio.connect(SERVER)
+except:
+    print(">>> [Pi] Offline Mode: Đang chạy chế độ kiểm tra cục bộ.")
+
 
 while cap.isOpened():
     ret, frame = cap.read()
@@ -89,6 +107,10 @@ while cap.isOpened():
 with open(DATA_FILE, "w") as f:
     json.dump(collected_data, f)
 
+if sio.connected:
+            sio.emit('send_coords', {'data': collected_data})
+
 cap.release()
 cv2.destroyAllWindows()
 detector.close()
+sio.disconnect()
